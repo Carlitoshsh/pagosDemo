@@ -22,8 +22,9 @@
             }
             else
             {
-
-                <pre>@json</pre>
+                <div class="code">
+                    <pre>@json</pre>
+                </div>
             }
             <footer class="blockquote-footer">Someone famous in <cite title="Source Title">Source Title</cite></footer>
         </blockquote>
@@ -47,12 +48,24 @@
 
         if (response.IsSuccessStatusCode)
         {
-            json = await response.Content.ReadAsStringAsync();
+            json = PrettyJson(await response.Content.ReadAsStringAsync());
         }
         else
         {
             json = "Error.";
         }
         esperando = false;
+    }
+
+    public string PrettyJson(string unPrettyJson)
+    {
+        var options = new JsonSerializerOptions()
+        {
+            WriteIndented = true
+        };
+
+        var jsonElement = JsonSerializer.Deserialize<JsonElement>(unPrettyJson);
+
+        return JsonSerializer.Serialize(jsonElement, options);
     }
 }

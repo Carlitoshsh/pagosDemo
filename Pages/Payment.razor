@@ -1,4 +1,4 @@
-﻿@page "/counter"
+﻿@page "/payment"
 @inject IHttpClientFactory ClientFactory
 @using DemoPagos.Models
 @using System.Text.Json
@@ -7,10 +7,10 @@
 @inject NavigationManager MyNavigationManager
 
 <PageTitle>Counter</PageTitle>
+<h1>Modelo de pagos!</h1>
 
 <div class="card">
     <div class="card-body">
-        <h5 class="card-title">Pagos</h5>
         <EditForm Model="@datosPago" OnValidSubmit="@HandleValidSubmit" class="row g-3">
             <div class="col-md-6">
                 <label for="inputTipoDocumento" class="form-label">Tipo de documento</label>
@@ -67,9 +67,12 @@
         </EditForm>
     </div>
 </div>
+<h5>Modelo JSON</h5>
 <div class="card">
     <div class="card-body">
-        <pre>@JsonSerializer.Serialize(datosPago)</pre>
+        <div class="code">
+            <pre>@JsonSerializer.Serialize(datosPago)</pre>
+        </div>
     </div>
 </div>
 
@@ -117,6 +120,7 @@
 
     private async Task GenerarTransaccion(string token, Amount amount)
     {
+        pagando = true;
         KushkiMakeTransactionRequest requestMake = new()
         {
             token = token,
@@ -143,6 +147,7 @@
         {
             Console.WriteLine(JsonSerializer.Serialize(response));
         }
+        pagando = false;
     }
 
     private async Task HandleValidSubmit()
