@@ -1,0 +1,58 @@
+@page "/resumen"
+@inject NavigationManager NavManager
+@using Microsoft.AspNetCore.WebUtilities
+@inject IHttpClientFactory ClientFactory
+@using DemoPagos.Models
+@using System.Text.Json
+
+<div class="card">
+    <div class="card-header">
+        Resumen de compra
+    </div>
+    <div class="card-body">
+        <blockquote class="blockquote mb-0">
+            <p>JSON del resumen de compra</p>
+            @if (esperando)
+            {
+
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                    aria-valuenow="75" aria-valuemin="0" aria-valuemax="100" style="width: 75%"></div>
+                </div>
+            }
+            else
+            {
+
+                <pre>@json</pre>
+            }
+            <footer class="blockquote-footer">Someone famous in <cite title="Source Title">Source Title</cite></footer>
+        </blockquote>
+    </div>
+</div>
+
+@code {
+    string json = "";
+    bool esperando = true;
+    protected async override Task OnInitializedAsync()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query)["token"];
+        var request = new HttpRequestMessage(HttpMethod.Get,
+        $"https://api-uat.kushkipagos.com/transfer/v1/status/{query}");
+        request.Headers.Add("Private-Merchant-Id", "017ff0ef392d42fa9ba2e9e28f566a4c");
+
+        var client = ClientFactory.CreateClient();
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            json = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            json = "Error.";
+        }
+        esperando = false;
+    }
+}

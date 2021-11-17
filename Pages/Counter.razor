@@ -1,0 +1,192 @@
+﻿@page "/counter"
+@inject IHttpClientFactory ClientFactory
+@using DemoPagos.Models
+@using System.Text.Json
+@using System.Text
+@using System.Text.Json.Serialization;
+@inject NavigationManager MyNavigationManager
+
+<PageTitle>Counter</PageTitle>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Pagos</h5>
+        <EditForm Model="@datosPago" OnValidSubmit="@HandleValidSubmit" class="row g-3">
+            <div class="col-md-6">
+                <label for="inputTipoDocumento" class="form-label">Tipo de documento</label>
+                <InputSelect @bind-Value="datosPago.TipoDocumento" id="inputTipoDocumento" class="form-select">
+                    <option>Seleccione...</option>
+                    @foreach (var item in documentos)
+                    {
+                        <option value="@item.code">@item.document</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-6">
+                <label for="inputDoc" class="form-label">Documento</label>
+                <InputText @bind-Value="datosPago.NumeroDocumento" type="text" class="form-control" id="inputDoc" />
+            </div>
+            <div class="col-12">
+                <label for="inputNum" class="form-label">Valor a pagar</label>
+                <InputNumber @bind-Value="datosPago.Pago" class="form-control" id="inputNum" />
+            </div>
+            <div class="col-12">
+                <label for="inputAddress2" class="form-label">Correo</label>
+                <InputText @bind-Value="datosPago.Correo" type="email" class="form-control" id="inputAddress2"
+                    placeholder="dominio@correo.com" />
+            </div>
+            <div class="col-md-6">
+                <label for="inputPersonaNatural" class="form-label">Tipo de persona</label>
+                <InputSelect @bind-Value="datosPago.TipoPersona" id="inputPersonaNatural" class="form-select">
+                    <option>Seleccione...</option>
+                    <option value="0">Persona Natural</option>
+                    <option value="1">Persona Jurídica</option>
+                </InputSelect>
+            </div>
+            <div class="col-md-6">
+                <label for="inputState" class="form-label">Banco</label>
+                <InputSelect @bind-Value="datosPago.Banco" id="inputState" class="form-select">
+                    @foreach (var item in bancos)
+                    {
+                        <option value="@item.code">@item.name</option>
+                    }
+                </InputSelect>
+            </div>
+            @if (pagando)
+            {
+                <div class="spinner-grow text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            }
+            else
+            {
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">Pagar</button>
+                </div>
+            }
+        </EditForm>
+    </div>
+</div>
+<div class="card">
+    <div class="card-body">
+        <pre>@JsonSerializer.Serialize(datosPago)</pre>
+    </div>
+</div>
+
+@code {
+    bool pagando = false;
+    private DatosPago? datosPago = new();
+    List<Banco> bancos = new();
+    List<TipoDocumento> documentos = new();
+    async Task RecuperarBancos()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get,
+        "https://api-uat.kushkipagos.com/transfer/v1/bankList");
+        request.Headers.Add("Public-Merchant-Id", "6e28f9162aad4b48946f01b5cad17e78");
+
+        var client = ClientFactory.CreateClient();
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            using var responseStream = await response.Content.ReadAsStreamAsync();
+            bancos = await JsonSerializer.DeserializeAsync<List<Banco>>(responseStream);
+        }
+    }
+    async Task RecuperarTiposDocumento()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get,
+        "https://gist.githubusercontent.com/Carlitoshsh/c1d53f7a4c50997786d00f5ed7804962/raw/f5ce2feec0340b9410daa27b91e614d6168686e3/documents.json");
+
+        var client = ClientFactory.CreateClient();
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            using var responseStream = await response.Content.ReadAsStreamAsync();
+            documentos = await JsonSerializer.DeserializeAsync<List<TipoDocumento>>(responseStream);
+        }
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        await RecuperarBancos();
+        await RecuperarTiposDocumento();
+    }
+
+    private async Task GenerarTransaccion(string token, Amount amount)
+    {
+        KushkiMakeTransactionRequest requestMake = new()
+        {
+            token = token,
+            amount = amount
+        };
+        var request = new HttpRequestMessage(HttpMethod.Post,
+        "https://api-uat.kushkipagos.com/transfer/v1/init");
+        Console.WriteLine(JsonSerializer.Serialize(requestMake));
+        request.Content = new StringContent(JsonSerializer.Serialize(requestMake), Encoding.UTF8, "application/json");
+        request.Headers.Add("Private-Merchant-Id", "017ff0ef392d42fa9ba2e9e28f566a4c");
+
+        var client = ClientFactory.CreateClient();
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            using var responseStream = await response.Content.ReadAsStreamAsync();
+            KushkiURLGenerared response2 = new();
+            response2 = await JsonSerializer.DeserializeAsync<KushkiURLGenerared>(responseStream);
+            MyNavigationManager.NavigateTo(response2.redirectUrl);
+        }
+        else
+        {
+            Console.WriteLine(JsonSerializer.Serialize(response));
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post,
+        "https://api-uat.kushkipagos.com/transfer/v1/tokens");
+        pagando = true;
+
+        Amount amount = new()
+        {
+            subtotalIva0 = datosPago.Pago
+        };
+        KushkiRequestToken khuskiRequest = new()
+        {
+            callbackUrl = $"{MyNavigationManager.BaseUri}resumen",
+            userType = datosPago.TipoPersona,
+            documentType = datosPago.TipoDocumento,
+            documentNumber = datosPago.NumeroDocumento,
+            paymentDescription = "Description of the payment.",
+            email = datosPago.Correo,
+            currency = "COP",
+            amount = amount,
+            bankId = datosPago.Banco,
+
+        };
+        request.Content = new StringContent(JsonSerializer.Serialize(khuskiRequest), Encoding.UTF8, "application/json");
+        request.Headers.Add("Public-Merchant-Id", "6e28f9162aad4b48946f01b5cad17e78");
+
+        var client = ClientFactory.CreateClient();
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            using var responseStream = await response.Content.ReadAsStreamAsync();
+            KushkiResponse response2 = new();
+            response2 = await JsonSerializer.DeserializeAsync<KushkiResponse>(responseStream);
+            await GenerarTransaccion(response2.token, amount);
+        }
+        else
+        {
+            Console.WriteLine(JsonSerializer.Serialize(response));
+        }
+        pagando = false;
+
+    }
+}
